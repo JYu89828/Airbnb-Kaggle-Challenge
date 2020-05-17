@@ -1,0 +1,860 @@
+---
+title: "R Notebook"
+output:
+  word_document: default
+  pdf_document:
+    latex_engine: xelatex
+  html_notebook: default
+always_allow_html: yes
+---
+
+```{r setup, include=FALSE}
+
+# This chunk shows/hides the code in your final report. When echo = TRUE, the code
+# is shown in the report. When echo = FALSE, the code is hidden from the final report.
+# We would like to see your code, so please leave the setting as is during the course.
+# This chunk will not show up in your reports, so you can safely ignore its existence.
+
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+
+```{r}
+d <- getwd()
+setwd(d) 
+#Don't forget to set your working directory before you start!
+
+library("tidyverse")
+library("tidymodels")
+library("plotly")
+library("skimr")
+library(readr)
+library('caret')
+
+
+```
+
+```{r}
+library(usethis)
+#usethis::edit_r_environ()
+```
+
+
+```{r}
+dfTrain <-read_csv("airbnbTrain.csv")
+
+dfTrain<-dfTrain%>%filter(str_extract(dfTrain$`{randomControl}`, "[0-9]{3}")=='105')
+
+```
+
+
+
+We removed all the dollar signs, percentage signs in the numeric columns like 'cleaning_fee' from the raw dataset.
+```{r}
+dfTrain$cleaning_fee = as.numeric(gsub("[\\$,]", "", dfTrain$cleaning_fee))
+dfTrain$extra_people = as.numeric(gsub("[\\$,]", "", dfTrain$extra_people))
+dfTrain$security_deposit = as.numeric(gsub("[\\$,]", "", dfTrain$security_deposit))
+dfTrain$price = as.numeric(gsub("[\\$,]", "", dfTrain$price))
+dfTrain$host_response_rate = as.numeric(gsub("[\\%,]", "", dfTrain$host_response_rate))
+dfTrain$weekly_price = as.numeric(gsub("[\\$,]", "", dfTrain$weekly_price))
+dfTrain$monthly_price = as.numeric(gsub("[\\$,]", "", dfTrain$monthly_price))
+
+
+```
+
+
+
+We used the median of each column to replace the NAs in that column. We also had the plan to write a function to find the mode value of each column to replace its NAs. However, this plan was discarded as not all members agree with this approach.
+
+```{r}
+
+
+colSums(is.na(dfTrain))
+
+dfTrain$security_deposit[is.na(dfTrain$security_deposit)]=
+  median(dfTrain$security_deposit[!is.na(dfTrain$security_deposit)])
+
+dfTrain$review_scores_value[is.na(dfTrain$review_scores_value)]=
+  median(dfTrain$review_scores_value[!is.na(dfTrain$review_scores_value)])
+
+dfTrain$review_scores_location[is.na(dfTrain$review_scores_location)]=
+  median(dfTrain$review_scores_location[!is.na(dfTrain$review_scores_location)])
+
+
+dfTrain$review_scores_checkin[is.na(dfTrain$review_scores_checkin)]=
+  median(dfTrain$review_scores_checkin[!is.na(dfTrain$review_scores_checkin)])
+
+dfTrain$review_scores_accuracy[is.na(dfTrain$review_scores_accuracy)]=
+  median(dfTrain$review_scores_accuracy[!is.na(dfTrain$review_scores_accuracy)])
+
+dfTrain$review_scores_communication[is.na(dfTrain$review_scores_communication)]=
+  median(dfTrain$review_scores_communication[!is.na(dfTrain$review_scores_communication)])
+
+dfTrain$review_scores_cleanliness[is.na(dfTrain$review_scores_cleanliness)]=
+  median(dfTrain$review_scores_cleanliness[!is.na(dfTrain$review_scores_cleanliness)])
+
+dfTrain$review_scores_rating[is.na(dfTrain$review_scores_rating)]=
+  median(dfTrain$review_scores_rating[!is.na(dfTrain$review_scores_rating)])
+
+dfTrain$host_response_rate[is.na(dfTrain$host_response_rate)]=
+  median(dfTrain$host_response_rate[!is.na(dfTrain$host_response_rate)])
+
+dfTrain$cleaning_fee[is.na(dfTrain$cleaning_fee)]=
+  median(dfTrain$cleaning_fee[!is.na(dfTrain$cleaning_fee)])
+
+dfTrain$bathrooms[is.na(dfTrain$bathrooms)]=
+  median(dfTrain$bathrooms[!is.na(dfTrain$bathrooms)])
+
+dfTrain$bedrooms[is.na(dfTrain$bedrooms)]=
+  median(dfTrain$bedrooms[!is.na(dfTrain$bedrooms)])
+
+dfTrain$beds[is.na(dfTrain$beds)]=
+  median(dfTrain$beds[!is.na(dfTrain$beds)])
+
+dfTrain$host_identity_verified[is.na(dfTrain$host_identity_verified)]=
+  median(dfTrain$host_identity_verified[!is.na(dfTrain$host_identity_verified)])
+
+dfTrain$host_is_superhost[is.na(dfTrain$host_is_superhost)]=
+  median(dfTrain$host_is_superhost[!is.na(dfTrain$host_is_superhost)])
+
+dfTrain$host_listings_count[is.na(dfTrain$host_listings_count)]=
+  median(dfTrain$host_listings_count[!is.na(dfTrain$host_listings_count)])
+
+dfTrain$weekly_price[is.na(dfTrain$weekly_price)]=
+  median(dfTrain$weekly_price[!is.na(dfTrain$weekly_price)])
+
+dfTrain$monthly_price[is.na(dfTrain$monthly_price)]=
+  median(dfTrain$monthly_price[!is.na(dfTrain$monthly_price)])
+
+dfTrain$square_feet[is.na(dfTrain$square_feet)]=
+  median(dfTrain$square_feet[!is.na(dfTrain$square_feet)])
+################################################################
+
+```
+
+
+
+After doing some research on Airbnb hotels, we deleted variables that were duplicated, variables that only had one value(all NAs or all False), variables that have nothing to do with the host, variables that are correlated to another variable(Collinearity), variables that would only be acknowledged after a booking happens, variables that are not needed in this Chicago research(like state, city, random control, etc.). 
+```{r}
+
+
+
+dfTrain[c(3,20,32,34, 43, 45)]=NULL   #Text columns which are duplicated to the other variables
+dfTrain$space=NULL                    
+dfTrain$transit=NULL
+dfTrain$description=NULL
+
+
+dfTrain$is_business_travel_ready=NULL #All False
+dfTrain$host_acceptance_rate=NULL     #All N/A
+dfTrain$host_has_profile_pic=NULL     #Nothing to do with our host         
+dfTrain$monthly_price=NULL            #Correlated with weekly_price 
+dfTrain$host_since=NULL               #People don't care how long has a host been
+
+dfTrain$latitude=NULL                 #Duplicated with neighborhood variable for locating a record
+dfTrain$longitude=NULL
+dfTrain$zipcode=NULL
+
+dfTrain$host_verifications=NULL       #Verification of the host won't be known by the guest
+dfTrain$require_guest_phone_verification=NULL #Verification happens after the guest intent to book a house
+dfTrain$require_guest_profile_picture=NULL
+
+dfTrain$state=NULL                    #We are only doing Chicago,IL's data
+dfTrain$city=NULL
+dfTrain$market=NULL       
+
+dfTrain$host_location=NULL            #Host's location have nothing to do with the house people want to book
+dfTrain$host_neighbourhood=NULL
+
+dfTrain$id=NULL                       #ID
+dfTrain$requires_license=NULL         #All license are assumed verified on Airbnb by the guests
+dfTrain$`{randomControl}`=NULL        #Used for determine the Chicago records only
+dfTrain$bed_type=NULL                 #All beds are normal real beds
+```
+
+
+
+We firstly removed the special signs in the amenities column
+```{r}
+dfTrain$amenities<-gsub("\\{|\\}","",dfTrain$amenities)
+
+```
+
+
+The amenities variable is considered as a possible influential factor in high_booking_rate because of some amenities may be critical for some rentees. However, considering there are more than 150 types of amenities, we needed to reduce the number of dummy variables so that it doesn’t bias our model. Therefore, we chose only those amenities dummies that have at least 2000 Trues so that only the most important amenities remained. 
+
+```{r}
+
+
+library(splitstackshape)
+b<-cSplit_e(dfTrain, split.col = "amenities", sep = ",", type = "character", mode = "binary", fixed = TRUE, fill = 0)
+
+b<-b[,39:219]
+
+num<-c()
+for (i in 1:181) {
+  if(sum(b[,i])<2000){    #we don't want too many dummy variables which can bias our models, therefore we need to make sure 
+    num<-c(num,i)         #the dummies are dominantly common features
+  }            
+}
+
+colnames(b[num])
+b<-b[!colnames(b) %in% colnames(b[num])]
+
+dfTrain$amenities=NULL
+
+dfTrain<-dfTrain%>%cbind(b)
+
+```
+
+
+
+
+Because the ‘property_type’ variable is quite rank deficient, we re-engineered this variable so that those rare property types are all merged as ‘Other’, leaving only four categories in that variable.
+```{r}
+
+dfTrain$property_type[dfTrain$property_type!='Apartment'&dfTrain$property_type!='Condominium'&dfTrain$property_type!='House']='Other'
+```
+
+
+
+We looked up Chicago’s homicide distribution in each neighborhood and made a dummy variable called ‘is_high_crime_area’ for those high homicide rate neighborhoods.We also made a dummy variable for those neighborhoods that are next to Lake Michigan because we thought they may have a higher booking rate than those who are not.
+
+```{r}
+
+dfTrain$is_next_to_Lake<-ifelse(dfTrain$neighbourhood %in% c('Rogers Park','Edgewater','Uptown','Lakeview','Lincoln Park',
+                                                             'Near North Side','Loop','River North','South Loop/Printers Row',
+                                                             'Old Town','Streeterville','Gold Coast','Bronzeville','Oakland',
+                                                             'Kenwood','Hyde Park','Woodlawn','South Shore','South Chicago',
+                                                             'East Side','Hegewisch'),1,0)
+
+dfTrain$is_high_crime_area<-ifelse(dfTrain$neighbourhood %in% c('Austin','Humboldt Park','Garfield Park','North Lawndale',
+                                                                  'South Lawndale','Little Village','Bronzeville','Englewood',
+                                                                  'Auburn Gresham',"Chatham",'Avalon Park','South Chicago',
+                                                                  'Calumet Heights','East Side',
+                                                                  'South Deering','Hegewisch','Pullman','West Pullman',
+                                                                  'Riverdale','Roseland','Burnside'),1,0)
+
+```
+
+
+
+Due to the ‘neighbourhood’ variable having too many levels, we decide to modify it by merging several neighborhoods into a community area based on Chicago’s zone standard. The modified variable is now called ‘Community_areas’. 
+```{r}
+
+dfTrain$neighbourhood[dfTrain$neighbourhood %in% c('Loop','Near North Side','River West','River North',
+                                                   'South Loop/Printers Row','Old Town','Streeterville','Gold Coast')]='Central'
+dfTrain$neighbourhood[dfTrain$neighbourhood %in% c('North Center','Lakeview','Avondale','Boystown','Logan Square',
+                                                   'Lincoln Park','Bucktown','Roscoe Village','Wrigleyville')]='NorthSide'
+dfTrain$neighbourhood[dfTrain$neighbourhood %in% c("O'Hare",'Norwood Park','Edison Park','Jefferson Park','North Park',
+                                                   'Albany Park','West Ridge','Rogers Park','Lincoln Square',
+                                                   'Edgewater','Uptown','Andersonville','Sauganash')]='FarNorthSide'
+dfTrain$neighbourhood[dfTrain$neighbourhood %in% c("Dunning",'Portage Park','Irving Park','Montclare','Belmont Cragin',
+                                                   'Hermosa')]='NorthWestSide'
+dfTrain$neighbourhood[dfTrain$neighbourhood %in% c("Austin",'Humboldt Park','West Town/Noble Square','West Loop/Greektown',
+                                                   'Near West Side','Pilsen','Little Village','North Lawndale',
+                                                   'Garfield Park','South Lawndale','Galewood','Little Italy/UIC',
+                                                   'Ukrainian Village','Wicker Park')]='WestSide'
+dfTrain$neighbourhood[dfTrain$neighbourhood %in% c("Garfield Ridge",'Clearing','Archer Heights','Brighton Park',
+                                                   'McKinley Park','Back of the Yards','Gage Park','West Elsdon',
+                                                   'West Lawn','Marquette Park', 'Englewood' )]='SouthWestSide'
+dfTrain$neighbourhood[dfTrain$neighbourhood %in% c("Bridgeport",'Armour Square','Chinatown','Bronzeville',
+                                                   'Washington Park','Oakland','Kenwood','Hyde Park',
+                                                   'Woodlawn','Grand Crossing', 'South Shore')]='SouthSide'
+dfTrain$neighbourhood[dfTrain$neighbourhood %in% c("Ashburn",'Auburn Gresham','Washington Heights','Beverly',
+                                                   'Morgan Park','Mount Greenwood','Mt. Greenwood')]='FarSouthWestSide'
+dfTrain$neighbourhood[dfTrain$neighbourhood %in% c("Chatham",'Avalon Park','South Chicago','Calumet Heights',
+                                                   'East Side','South Deering','Hegewisch','Pullman','West Pullman',
+                                                   'Riverdale','Roseland','Burnside')]='FarSouthEastSide'
+dfTrain$neighbourhood[is.na(dfTrain$neighbourhood)]='N/A'
+
+
+dfTrain<-dfTrain%>%rename(Community_areas='neighbourhood')
+```
+
+
+Based on whether a variable is in the major region of Chicago(North Side, South Side, West Side, Central), we made a dummy variable called ‘is_major_section’.
+```{r}
+dfTrain$is_major_section<-ifelse(dfTrain$Community_areas %in% c('WestSide','NorthSide','Central','SouthSide'),1,0)
+```
+
+
+Eventually, we finished up the data processing by converting the data type of the dependent variable ‘high_booking_rate’ to factor. We also made sure the column names of the dataset are easy to read.
+```{r}
+dfTrain$high_booking_rate=factor(dfTrain$high_booking_rate)
+colnames(dfTrain)<-make.names(colnames(dfTrain),unique = TRUE)
+```
+
+
+
+```{r}
+#Setting the seed
+set.seed(333)
+
+#Partitioning the dataset into a 70% - 30% split
+Train <- dfTrain %>% sample_frac(.7)
+Test <- setdiff(dfTrain, Train)
+```
+
+
+Random Forest Method
+```{r}
+# Random Forest Method
+library("randomForest")
+colnames(Train[, sapply(Train, class) == 'character'])
+Train$cancellation_policy=as.factor(Train$cancellation_policy)
+Train$host_response_time=as.factor(Train$host_response_time)
+Train$Community_areas=as.factor(Train$Community_areas)
+Train$property_type=as.factor(Train$property_type)
+Train$room_type=as.factor(Train$room_type)
+
+Test$cancellation_policy=as.factor(Test$cancellation_policy)
+Test$host_response_time=as.factor(Test$host_response_time)
+Test$Community_areas=as.factor(Test$Community_areas)
+Test$property_type=as.factor(Test$property_type)
+Test$room_type=as.factor(Test$room_type)
+
+
+  
+fit.forest <- randomForest(high_booking_rate~., data=Train, importance=TRUE) #grows the forest
+
+
+# resultsrandomforest<-fit.forest%>% 
+#   predict(Test, type = 'prob') %>% 
+#   cbind(Test)
+# 
+# resultsrandomforest$`0`=NULL
+# resultsrandomforest$predictedraw<-ifelse(resultsrandomforest$`1`>0.5,1,0)
+
+# library(cvAUC)
+# resultsrandomforest$predictedraw<-as.numeric(resultsrandomforest$predictedraw)
+# AUC(resultsrandomforest$predictedraw, resultsrandomforest$high_booking_rate)
+
+resultsforest<- fit.forest%>% 
+  predict(Test, type = 'response') %>% 
+  bind_cols(Test, predictedClass=.)
+
+resultsforest %>% 
+  xtabs(~predictedClass+ high_booking_rate,.) %>% 
+  confusionMatrix(positive = '1') 
+
+
+
+
+```
+
+
+determine variable importance
+
+```{r}
+#variable importance chart
+varImpPlot(fit.forest, n.var = 71, type = 2, main = "Variable Importance Plot")
+
+#Run it in the console and click the zoom button on the 'Plots' tag to zoom in
+
+```
+
+
+After evaluating the variable importance of all 71 processed variables, we decided to use the elbow method to select only the most contributing variables(those whose mean decrease gini is above the elbow variable's, which in this case,is the'amenities_.Hot.water' )
+
+Random Forest with the most contributing variables:
+```{r}
+fit.forest_tuned <- randomForest(high_booking_rate~review_scores_rating+price+host_listings_count+cleaning_fee+availability_365+
+                             host_is_superhost+Community_areas+availability_90+availability_60+availability_30+
+                             minimum_nights+extra_people+maximum_nights+cancellation_policy+amenities_.Free.street.parking.+
+                             security_deposit+guests_included+accommodates+property_type+beds+
+                             amenities_.Self.check.in.+amenities_.Hot.water.+review_scores_value+host_identity_verified+
+                               bedrooms+host_response_time+review_scores_cleanliness+bathrooms+weekly_price, data=Train, importance=TRUE) #grows the forest
+
+resultsforesttuned<- fit.forest_tuned%>% 
+  predict(Test, type = 'response') %>% 
+  bind_cols(Test, predictedClass=.)
+
+resultsforesttuned %>% 
+  xtabs(~predictedClass+ high_booking_rate,.) %>% 
+  confusionMatrix(positive = '1') 
+```
+
+
+Bayes GLM:
+```{r}
+#Bayes GLM method
+library('arm')
+fitbayesglm <- bayesglm(high_booking_rate ~., data=Train, family="binomial")
+
+#display(fit)
+#summary(fit)
+
+resultsbayesglm<-fitbayesglm%>%
+  predict(Test, type = 'response') %>%
+  bind_cols(Test, predictedresponse=.)
+
+resultsbayesglm$predicted<-ifelse(resultsbayesglm$predictedresponse>0.5,1,0)
+
+resultsbayesglm %>% 
+  xtabs(~predicted+ high_booking_rate,.) %>% 
+  confusionMatrix(positive = '1') 
+
+
+```
+
+Bayes GLM method using tuned variables:
+```{r}
+#Bayes GLM method using tuned variables
+library('arm')
+fitbayesglmtuned <- bayesglm(high_booking_rate~review_scores_rating+price+host_listings_count+cleaning_fee+availability_365+
+                             host_is_superhost+Community_areas+availability_90+availability_60+availability_30+
+                             minimum_nights+extra_people+maximum_nights+cancellation_policy+amenities_.Free.street.parking.+
+                             security_deposit+guests_included+accommodates+property_type+beds+
+                             amenities_.Self.check.in.+amenities_.Hot.water.+review_scores_value+host_identity_verified+
+                               bedrooms+host_response_time+review_scores_cleanliness+bathrooms+weekly_price, data=Train, family="binomial")
+
+#display(fit)
+#summary(fit)
+
+resultsbayesglmtuned<-fitbayesglmtuned%>%
+  predict(Test, type = 'response') %>%
+  bind_cols(Test, predictedresponse=.)
+
+resultsbayesglmtuned$predicted<-ifelse(resultsbayesglmtuned$predictedresponse>0.5,1,0)
+
+resultsbayesglmtuned %>% 
+  xtabs(~predicted+ high_booking_rate,.) %>% 
+  confusionMatrix(positive = '1') 
+
+```
+
+
+glmnet with all variables:
+```{r}
+
+#glmnet
+set.seed(333)
+lambda <- 10^seq(-5, 2, length = 100)
+
+fitElasticNet <- train(high_booking_rate~.,family='binomial', data = Train, method = "glmnet",
+                       trControl = trainControl("cv", number = 10),
+                       tuneGrid = expand.grid(alpha = 0.5, lambda = lambda))
+fitElasticNet$bestTune$lambda
+
+resultsElasticNetCaret <-
+fitElasticNet %>%
+predict(Test, type='raw') %>%
+bind_cols(Test, predictedClass=.)
+
+resultsElasticNetCaret %>%
+xtabs(~predictedClass+high_booking_rate, .) %>%
+confusionMatrix(positive = '1')
+
+```
+
+
+glmnet with key variables only:
+```{r}
+
+#glmnet with selected variables
+set.seed(333)
+lambda <- 10^seq(-5, 2, length = 100)
+
+fitElasticNetTuned <- train(high_booking_rate~review_scores_rating+price+host_listings_count+cleaning_fee+availability_365+
+                             host_is_superhost+Community_areas+availability_90+availability_60+availability_30+
+                             minimum_nights+extra_people+maximum_nights+cancellation_policy+amenities_.Free.street.parking.+
+                             security_deposit+guests_included+accommodates+property_type+beds+
+                             amenities_.Self.check.in.+amenities_.Hot.water.+review_scores_value+host_identity_verified+
+                               bedrooms+host_response_time+review_scores_cleanliness+bathrooms+weekly_price,family='binomial', data = Train, method = "glmnet",
+                            trControl = trainControl("cv", number = 10),
+                            tuneGrid = expand.grid(alpha = 0.5, lambda = lambda))
+fitElasticNetTuned$bestTune$lambda
+
+resultsElasticNetTuned <-
+fitElasticNetTuned %>%
+predict(Test, type='raw') %>%
+bind_cols(Test, predictedClass=.)
+
+resultsElasticNetTuned %>%
+  xtabs(~predictedClass+high_booking_rate, .) %>%
+  confusionMatrix(positive = '1')
+```
+
+
+LDA with all variables:
+```{r}
+#LDA 
+train.control <- trainControl(method = "cv", number = 10)
+# Train the model
+fitLDA <- train(high_booking_rate ~.,family='binomial', data = Train, method = "lda",trControl = train.control)
+
+resultsLDACaret <-fitLDA %>%
+  predict(Test, type='raw') %>%
+  bind_cols(Test, predictedClass=.)
+
+resultsLDACaret %>%
+  xtabs(~predictedClass+high_booking_rate, .) %>%
+  confusionMatrix(positive = '1')
+```
+
+
+
+LDA with key variables only:
+
+```{r}
+#LDA with selected variables
+
+train.control <- trainControl(method = "cv", number = 10)
+# Train the model
+fitLDATuned <- train(high_booking_rate~review_scores_rating+price+host_listings_count+cleaning_fee+availability_365+
+                             host_is_superhost+Community_areas+availability_90+availability_60+availability_30+
+                             minimum_nights+extra_people+maximum_nights+cancellation_policy+amenities_.Free.street.parking.+
+                             security_deposit+guests_included+accommodates+property_type+beds+
+                             amenities_.Self.check.in.+amenities_.Hot.water.+review_scores_value+host_identity_verified+
+                               bedrooms+host_response_time+review_scores_cleanliness+bathrooms+weekly_price,family='binomial', data = Train, method = "lda",
+                trControl =train.control)
+
+resultsLDATuned <-fitLDATuned %>%
+  predict(Test, type='raw') %>%
+  bind_cols(Test, predictedClass=.)
+
+resultsLDATuned %>%
+  xtabs(~predictedClass+high_booking_rate, .) %>%
+  confusionMatrix(positive = '1')
+```
+
+
+KNN with all variables:
+```{r}
+
+#KNN
+fitKNN <- train(high_booking_rate ~ ., method='knn', data=Train, trControl=trainControl(method='cv', number=10), preProcess = c("center", "scale"), tuneLength = 30)
+
+fitKNN$finalModel
+
+
+#Let's run KNN on the same model, make predictions, and calculate performance
+resultsKNN <-  
+  fitKNN %>% 
+  predict(Test, type='raw') %>%
+  bind_cols(Test, predictedClass=.)
+
+resultsKNN %>% 
+  xtabs(~predictedClass+high_booking_rate, .) %>% 
+  confusionMatrix(positive = '1')
+
+```
+
+
+KNN with key variables only:
+```{r}
+#KNN Selected Variables
+fitKNNTuned <- train(high_booking_rate~review_scores_rating+price+host_listings_count+cleaning_fee+availability_365+
+                             host_is_superhost+Community_areas+availability_90+availability_60+availability_30+
+                             minimum_nights+extra_people+maximum_nights+cancellation_policy+amenities_.Free.street.parking.+
+                             security_deposit+guests_included+accommodates+property_type+beds+
+                             amenities_.Self.check.in.+amenities_.Hot.water.+review_scores_value+host_identity_verified+
+                               bedrooms+host_response_time+review_scores_cleanliness+bathrooms+weekly_price, method='knn', data=Train, trControl=trainControl(method='cv', number=10), preProcess = c("center", "scale"), tuneLength = 30)
+
+#See the final model output:
+fitKNNTuned$finalModel
+
+
+#Let's run KNN on the same model, make predictions, and calculate performance
+resultsKNNTuned <-  
+  fitKNNTuned %>% 
+  predict(Test, type='raw') %>%
+  bind_cols(Test, predictedClass=.)
+
+resultsKNNTuned %>% 
+  xtabs(~predictedClass+high_booking_rate, .) %>% 
+  confusionMatrix(positive = '1')
+
+```
+
+
+It seems that Random Forest(with all variables or with those most contributing variables only) won the prize of the best model. However, there is a confusion when we were determining whether we should use full variables or only the selected variables for random forest: The full model is slightly better in precision(Pos Pred Value=0.7743), but is also slightly worse in overall accuracy(0.8007); The reduced model is slightly better in overall accuracy(0.8065), but is slightly worse in precision(Pos Pred Value=0.7717). Our team needs to make a trade-off.
+
+Our team looked up the other measures provided by the confusionMatrix function. We can clearly see that the full model is worse than the reduced model in terms of the sensitivity(how many actual positives are successfully predicted) and neg pred value(how many negative predicitions are actually negative). Considering both these two measures are influenial to our client to determine whether to invest based on our model, we prefer to use the reduced model.
+
+
+Moreover, we researched the meaning of kappa. 
+
+According to Chen(https://towardsdatascience.com/interpretation-of-kappa-values-2acd1ca7b18f), the kappa is a statistic to measure the extent to which data collectors(raters) assign the same score to the same variable(called interrater reliability). It is used to account for the possibility that raters actually guess on at least some variables due to uncertainty.
+
+In general, the higher the kappa is, the better the model is.In this case,  the reduced model has higher kappa than that of the full model, means the raters have higher probability to assign the same score to this model.
+
+Afterall, our group determine to use the reduced Random Forest model as our final model. Now we need to determine the cutoff threshold for this model in order to maximize the precision.
+
+
+```{r}
+#Research the best cutoff
+
+#What is the default cutoff of random forest classifier
+
+resultsforesttuned<- fit.forest_tuned%>% 
+  predict(Test, type = 'prob') %>% 
+  cbind(Test)
+
+resultsforesttuned$predictedClass<-ifelse(resultsforesttuned$`1`>0.5,1,0)
+
+resultsforesttuned %>% 
+  xtabs(~predictedClass+ high_booking_rate,.) %>% 
+  confusionMatrix(positive = '1') 
+
+
+```
+The default probability cutoff for the random forest classifier is 0.5. In general, a higher cutoff value stands for higher precision(how many positive predictions are true) and lower sensitivity(how many actual positives are predicted), because we only predict the most possible records of all the possible records to be true, thereby drops a lot of less possible records and decreases the sensitivity. Due to the same reason, a lower cutoff values stands for lower precision and higher sensitivity.
+
+
+
+
+```{r}
+#We kept rising the cutoff value to see the change in Pos Pred Value(precision)
+
+#What is the minimum cutoff value if we want to maximize the precision?
+resultsforesttuned$predictedClass<-ifelse(resultsforesttuned$`1`>0.88,1,0)
+
+resultsforesttuned %>% 
+  xtabs(~predictedClass+ high_booking_rate,.) %>% 
+  confusionMatrix(positive = '1') 
+
+#The minimum cutoff to maximize the precision is 0.88
+
+#How many houses are predicted as positives(worth to invest) under this cutoff?
+sum(resultsforesttuned$predictedClass)
+
+
+```
+
+Because our investor prefers us to ensure all our predictions are a hit rather than covering as many potential positives(high booking rate properties) as possible, our key concern is to find the minimum cutoff that maximize the precision. According to our testing, when the cutoff threshold rises to 0.88 or above, the value of precision reaches 1.0, which means every single positive prediction of our model is a hit. Therefore,0.88 is our final cutoff threshold for our final reduced random forest classifier.
+
+
+
+
+```{r}
+#Chicago Airbnb Characteristic Analsysis through exploring the variable importance
+fit.forest_tuned$importance
+
+#The reduced random forest model gives us quite a lot of exploratory insights regarding Chicago’s Airbnb market. First of all, visitors to Chicago’s Airbnb have many characteristics that fit our common senses. They care the review ratings, price, cleaning fees, availability, and if the host is an Airbnb superhost. However, they also pay high intention to whether the host has multiple listings on Airbnb. It may because those hosts who have many listings may have a professional manager to manage and promote them, who in return, make these listings more competitive. 
+
+```
+The reduced random forest model gives us quite a lot of exploratory insights regarding Chicago’s Airbnb market. First of all, visitors to Chicago’s Airbnb have many characteristics that fit our common senses. They care the review ratings, price, cleaning fees, availability, and if the host is an Airbnb superhost. However, they also pay high intention to whether the host has multiple listings on Airbnb. It may because those hosts who have many listings may have a professional manager to manage and promote them, who in return, make these listings more competitive. 
+
+Community areas are also a significantly important variable that affects the probability of being a high booking rate property. It means there is a strong regional difference in Chicago’s Airbnb market. Some areas are more popular than others. The regional effect of Chicago Airbnb is also our research focus for this project.
+
+Some other interesting and unique factors that affect Chicago Airbnb market are some amenities. For instance, those properties that have an amenity for free road parking are more popular than others. Based on our personal life experience in Chicago, I’d say this is probably true as the City of Chicago charges so high for overnight parking that even the hotel fees could be suppressed. 
+
+
+
+
+
+
+Research Question and FIndings
+
+#Question 1 Does Chicago’s high crime rate areas affect their booking rate of Airbnb?
+
+# Intuitive Exploration
+
+We separate Chicago into eight areas to check how specific characteristics of a District affect the booking rate.  
+
+Since the West Side, South Side and Far Southeast Side have a higher crime rate according to our research. We determine one area have a high crime rate if it affiliated with these three pre-identified areas.
+
+![](https://upload.wikimedia.org/wikipedia/commons/7/7c/2013_Chicago_Homicide_Map.png)
+
+
+```{r}
+
+CrimeRate <- 
+  dfTrain %>% 
+  group_by(crime_level = as.factor(is_high_crime_area),High_Booking = as.factor(high_booking_rate)) %>% 
+  summarize(count_HighbookingRate = n())
+
+CrimeRatePlot <- ggplot(data.frame(CrimeRate), aes( x = crime_level, 
+                                                    y = count_HighbookingRate, 
+                                                    fill= High_Booking)) +
+  geom_bar(stat = "identity", position="dodge") +
+  ggtitle("The Frequency of High Booking in High/Low Crime Rate Areas")
+    
+
+CrimeRatePlot
+
+```
+On X-axis, Crime _level 0 represents for low crime rate area, Crime _level 1 represents for high crime rate. From the above bar chart, Red bar refers to low booking rate,and blue bar refers to high booking rate. As we can see from this graph, obviously low crime rate area has higher number of high booking rate listings. 
+From the 5120 data point, only roughly 30% of the listings have high booking rate. The airbnb market in Chicago is not as popular as we expected.
+
+
+Using Bayesian Linear Regression to testify our idea:
+
+```{r}
+fit <- bayesglm(high_booking_rate ~.-Community_areas, data=dfTrain, family="binomial")  
+```
+
+```{r}
+summary(fit)
+```
+
+
+Results and Findings of Q1:
+
+We ran the bayesian model with high booking rate as our dependent variable, all the variables, except Commuinty_areas variable because we create three dummy variables(is_next_to_Lake, is_high_crime_area, is_major_section) from this categorical variable. From this model, we can find that if the house is in the high crime neighbourhoods, the coefficient is negative which implies that being a high crime rate neighbourhood has negative effect on the booking rate, holding everything else constant. If we set alpha=0.1, the coefficient of the variable is significant. 
+
+We also have other interesting findings when doing research regarding the relationship between location and high booking rate.For example, if the house is in major section, the coefficient of the variable is positive and significant. So if we consider realtionship between the charactistic of location and booking rate in Chicago, the most important factors are whether it is close to the downtown and whether it is in a high crime rate neighbourhood. 
+
+
+
+
+
+
+#Q2 Does popular areas have price premium than those not?  
+
+The second question we would like to explore is whether popular areas have  price premium than those not. So what we did is we map out all the listings usign the longitude and lagitude in the dataset and comparing these clusters on the map with Chicago district  map which is divided into  8 main areas, we merge the smaller N into these 8 area as we have mentioned.
+
+We overlapped the areas map on top of the map with listings. The picture is not that clear, but we listed out the top five popular airbnb areas, they are north side, which have 1600 listings in one area, followed by Central and west side of the chicago. West side of the chicago is what we identiffied as high crime rate area, but surprisingly, it is the third popular areas for airbnb listings.  The toal listings for this area is combined by two smaller area, first part  is the area with high crime rate, which has only 178 listings, and the area that is closer to central is what contributes the most to the listings it has a total  of 748 listings. This location is right next to where the all the popular museums, and tourist attractions are located. Therefore, this is a very hot area , despite high crime rate on the west side.
+
+For the boxplot for the price variation across different areas. The median price for central is $159, $40 higher than the north side of the chicago.  Median for Unpopular areas like far south east side and southwest side is aroudn 65 bucks.
+
+```{r}
+#Import original training dataset which includes longtitude & latitude
+
+dfTrainOriginal<-read_csv('airbnbTrain.csv')
+```
+
+```{r}
+#map the airbnb location
+library('leaflet')
+
+dfTrainOriginal <- dfTrainOriginal %>%filter(str_extract(dfTrainOriginal$`{randomControl}`, "[0-9]{3}")=='105')
+
+dfTrainOriginal %>% 
+  leaflet(height=5000, width=1500) %>% 
+  addProviderTiles(providers$OpenStreetMap.Mapnik) %>% 
+  addMarkers(label = dfTrainOriginal$neighbourhood, clusterOptions = markerClusterOptions())
+```
+
+```{r}
+#Room to bedroom ratio
+#Box plot
+filterprice<-dfTrain %>% filter(price<300)
+boxPlotsForAll<-
+  ggplot(data = filterprice, aes(x = fct_reorder(Community_areas, price, .desc = TRUE), y = price)) + 
+  geom_boxplot() +
+  labs(title="Variations in Price across Different Areas Ordered by Median price of Airbnbs in Each Area")
+
+ggplotly(boxPlotsForAll)
+
+```
+
+
+
+#Q3:How does accommodation affect the booking rate of Airbnb/listing price?
+```{r}
+dfTrain$high_booking_rate <- as.factor(dfTrain$high_booking_rate) #convert to factor 
+```
+
+```{r}
+library(ggplot2)
+
+plotAcc<-ggplot(dfTrainOriginal) + geom_histogram(mapping = aes(accommodates, fill = property_type), stat = "count") + 
+  theme_minimal(base_size=13)+ 
+  ggtitle("Accommodates and Room Type")
+ggplotly(plotAcc)
+
+```
+```{r}
+  library(ggplot2)
+
+  # Pie chart to show the top 5 accommodations and their percentages
+  acc_counts <- table(dfTrain$accommodates) #frequency table
+  acc_types <- names(acc_counts)
+  counts <- as.vector(acc_counts)
+  pcts <- percent(counts/sum(counts))
+  acc_types_counts_df <- data.frame(group = acc_types, value = counts)
+
+  top_5_counts_df <- acc_types_counts_df %>% #select top 5 accomodations
+    group_by(group) %>% 
+    tally(value) %>% 
+    top_n(5, n)
+
+  pie <- ggplot(top_5_counts_df, aes(x = "", y = n, fill = group))+
+          geom_bar(width = 1, stat = "identity") +
+          coord_polar("y", start=0) +
+          geom_text(aes(label = paste(round(n / sum(n) * 100), "%")), position = position_stack(vjust = 0.5)) +
+          labs(fill = "Accommodation Type",
+          x = NULL,
+          y = NULL,
+          title = "Top 5 Accomodations for Airbnb in Chicago")
+  
+  blank_theme <- theme_minimal()+ #create a blank theme
+    theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.border = element_blank(),
+    panel.grid=element_blank(),
+    axis.ticks = element_blank(),
+    plot.title=element_text(size=14, face="bold")
+  )
+  
+  pie <- pie + blank_theme + theme(axis.text.x=element_blank())
+  pie
+```
+```{r}
+plotAcc<-ggplot(dfTrain) + geom_histogram(mapping = aes(accommodates), stat = "count") + 
+  theme_minimal(base_size=13)+ 
+  ggtitle("The Proportion of Room Type in Each Area")
+ggplotly(plotAcc)
+```
+
+
+```{r}
+#boxplot for accomodate and price
+filterprice<- dfTrain %>% filter(price < 300)
+filterprice$high_booking_rate<-as.numeric(filterprice$high_booking_rate)
+gg<- filterprice %>% 
+  group_by(accommodates) %>% 
+  summarize(mean_booking_rate = mean(high_booking_rate))
+
+
+#
+gg %>%
+  filter(accommodates< 17) %>% 
+	  ggplot(aes(x = accommodates , y= mean_booking_rate,color= mean_booking_rate )) + geom_point()
+```
+
+
+```{r}
+  # Boxplot to show the distribution of price across accommodation types
+top_5_data <- dfTrain %>% 
+  filter(accommodates %in% c(1, 2, 3, 4, 6))%>%
+  filter(price < 2500)
+
+
+bplot <- top_5_data %>%
+    ggplot(aes(x = as.factor(accommodates), y = price, color = high_booking_rate)) + 
+    geom_boxplot() +
+    ggtitle("Distritubtion of Price across Accommodation Types")
+            
+bplot
+```
+
+
+```{r}
+#write_csv(dfTrain,'Processed_Raw_TrainingSet.csv')
+
+```
+
+
+COnclusion
+
+Overall, we have concluded that: 
+1. Certain Chicago neighbourhoods’ high crime rate do affect Airbnb properties’ 
+booking rate negatively.  
+2. Popular community areas like, Central, North Side and West Side have price 
+premium over those non-popular community area 
+3. Accommodation number affects the booking rate of a property positively,though 
+for the same number of accommodations, the property that has a higher price 
+has a lower chance of becoming a high booking rate property. 
+We recommend our investor to purchase properties in regions other than the West Side and Far SouthEast Side where the crime rate is high. If the investor has purchased houses in popular areas like Central or North Side, the investor could potentially raise their booking price to above $95 a day, far greater than the average price of the whole Chicago.  
+ 
+Because the accommodation of two occupy the most significant proportion of accommodation types, followed by four-person accomodation we recommend the investor to modify their bedrooms to two-person bedrooms and make sure two-person booking is an option.  
+ 
+Afterall, we have built a well-performed random forest classifier with a cutoff that can maximize the prediction precision. We promise that if we predict one property to be positive, we are at least 95% confident that the predicted property is actually a high booking rate property.   
+ 
+ 
